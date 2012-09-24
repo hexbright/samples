@@ -7,13 +7,11 @@ Flashes out a message in morse code every time you press the button.  Nothing
 else.  The message and speed are easy to change- you can see and change both 
 in the first lines of code.
 
-hexbright4_nooverheat
+hexbright4
 ---------------------
-Just like hexbright4, except it won't shut itself down for overheating.  
 After programming it to your light, click the Serial Monitor button in the 
 Arduino software- you should see status messages and periodic temperature 
 readings from the light.
-
 
 hexbright_demo_momentary
 ------------------------  
