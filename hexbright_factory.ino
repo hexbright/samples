@@ -1,43 +1,29 @@
-/*             Test firmware for HexBright
+/* 
 
-Notes:
-  Requires Arduino 1.0.1!
-
+  Factory firmware for HexBright FLEX 
+  v2.2  Sept 17, 2012
+  
 */
 
 #include <math.h>
 #include <Wire.h>
 
 // Settings
-#define OVERTEMP                315
-// Constants
-#define ACC_ADDRESS             0x4C
-#define ACC_REG_XOUT            0
-#define ACC_REG_YOUT            1
-#define ACC_REG_ZOUT            2
-#define ACC_REG_TILT            3
-#define ACC_REG_INTS            6
-#define ACC_REG_MODE            7
+#define OVERTEMP                340
 // Pin assignments
 #define DPIN_RLED_SW            2
 #define DPIN_GLED               5
-#define DPIN_PGOOD              7
 #define DPIN_PWR                8
 #define DPIN_DRV_MODE           9
 #define DPIN_DRV_EN             10
-#define DPIN_ACC_INT            3
 #define APIN_TEMP               0
 #define APIN_CHARGE             3
-// Interrupts
-#define INT_SW                  0
-#define INT_ACC                 1
 // Modes
 #define MODE_OFF                0
-#define MODE_ALMOSTOFF          1
 #define MODE_LOW                2
-#define MODE_MED                3
 #define MODE_HIGH               4
 #define MODE_BLINKING           5
+#define MODE_BLINKING_PREVIEW   6
 
 // State
 byte mode = 0;
@@ -57,11 +43,8 @@ void setup()
   pinMode(DPIN_GLED,     OUTPUT);
   pinMode(DPIN_DRV_MODE, OUTPUT);
   pinMode(DPIN_DRV_EN,   OUTPUT);
-  pinMode(DPIN_ACC_INT,  INPUT);
-  pinMode(DPIN_PGOOD,    INPUT);
   digitalWrite(DPIN_DRV_MODE, LOW);
   digitalWrite(DPIN_DRV_EN,   LOW);
-  digitalWrite(DPIN_ACC_INT,  HIGH);
   
   // Initialize serial busses
   Serial.begin(9600);
@@ -76,8 +59,7 @@ void setup()
 
 void loop()
 {
-  static unsigned long lastTime, lastTempTime, lastAccTime;
-  static float lastKnobAngle, knob;
+  static unsigned long lastTime, lastTempTime;
   static byte blink;
   unsigned long time = millis();
   
@@ -93,7 +75,7 @@ void loop()
   }
   else // Hi-Z - shutdown
   {
-    digitalWrite(DPIN_GLED, (time&0x03FF)?LOW:HIGH);    
+    digitalWrite(DPIN_GLED, LOW);    
   }
   
   // Check the temperature sensor
@@ -101,13 +83,22 @@ void loop()
   {
     lastTempTime = time;
     int temperature = analogRead(APIN_TEMP);
-    if (temperature > OVERTEMP)
+    Serial.print("Temp: ");
+    Serial.println(temperature);
+    if (temperature > OVERTEMP && mode != MODE_OFF)
     {
-      Serial.println("Overheat shutdown!");
-      mode = MODE_OFF;
+      Serial.println("Overheating!");
+
+      for (int i = 0; i < 6; i++)
+      {
+        digitalWrite(DPIN_DRV_MODE, LOW);
+        delay(100);
+        digitalWrite(DPIN_DRV_MODE, HIGH);
+        delay(100);
+      }
       digitalWrite(DPIN_DRV_MODE, LOW);
-      digitalWrite(DPIN_DRV_EN, LOW);
-      digitalWrite(DPIN_PWR, LOW);
+
+      mode = MODE_LOW;
     }
   }
 
@@ -115,6 +106,7 @@ void loop()
   switch (mode)
   {
   case MODE_BLINKING:
+  case MODE_BLINKING_PREVIEW:
     if (time-lastTime < 250) break;
     lastTime = time;
 
@@ -129,37 +121,27 @@ void loop()
   switch (mode)
   {
   case MODE_OFF:
-    if (btnDown && !newBtnDown && (time-btnTime)>50)
+    if (btnDown && !newBtnDown && (time-btnTime)>20)
       newMode = MODE_LOW;
-    break;
-  case MODE_ALMOSTOFF:
-    // This mode exists just to ignore the button release.
-    if (!newBtnDown)
-      newMode = MODE_OFF;
+    if (btnDown && newBtnDown && (time-btnTime)>500)
+      newMode = MODE_BLINKING_PREVIEW;
     break;
   case MODE_LOW:
     if (btnDown && !newBtnDown && (time-btnTime)>50)
-      newMode = MODE_MED;
-    if (newBtnDown && (time-btnTime)>1500)
-      newMode = MODE_ALMOSTOFF;
-    break;
-  case MODE_MED:
-    if (btnDown && !newBtnDown && (time-btnTime)>50)
       newMode = MODE_HIGH;
-    if (newBtnDown && (time-btnTime)>1500)
-      newMode = MODE_ALMOSTOFF;
     break;
   case MODE_HIGH:
     if (btnDown && !newBtnDown && (time-btnTime)>50)
+      newMode = MODE_OFF;
+    break;
+  case MODE_BLINKING_PREVIEW:
+    // This mode exists just to ignore this button release.
+    if (btnDown && !newBtnDown)
       newMode = MODE_BLINKING;
-    if (newBtnDown && (time-btnTime)>1500)
-      newMode = MODE_ALMOSTOFF;
     break;
   case MODE_BLINKING:
     if (btnDown && !newBtnDown && (time-btnTime)>50)
-      newMode = MODE_LOW;
-    if (newBtnDown && (time-btnTime)>1500)
-      newMode = MODE_ALMOSTOFF;
+      newMode = MODE_OFF;
     break;
   }
 
@@ -175,26 +157,12 @@ void loop()
       digitalWrite(DPIN_DRV_MODE, LOW);
       digitalWrite(DPIN_DRV_EN, LOW);
       break;
-    case MODE_ALMOSTOFF:
-      Serial.println("Mode = almost off");
-      pinMode(DPIN_PWR, OUTPUT);
-      digitalWrite(DPIN_PWR, LOW);
-      digitalWrite(DPIN_DRV_MODE, LOW);
-      digitalWrite(DPIN_DRV_EN, LOW);
-      break;
     case MODE_LOW:
       Serial.println("Mode = low");
       pinMode(DPIN_PWR, OUTPUT);
       digitalWrite(DPIN_PWR, HIGH);
       digitalWrite(DPIN_DRV_MODE, LOW);
       analogWrite(DPIN_DRV_EN, 255);
-      break;
-    case MODE_MED:
-      Serial.println("Mode = med");
-      pinMode(DPIN_PWR, OUTPUT);
-      digitalWrite(DPIN_PWR, HIGH);
-      digitalWrite(DPIN_DRV_MODE, HIGH);
-      analogWrite(DPIN_DRV_EN, 128);
       break;
     case MODE_HIGH:
       Serial.println("Mode = high");
@@ -204,6 +172,7 @@ void loop()
       analogWrite(DPIN_DRV_EN, 255);
       break;
     case MODE_BLINKING:
+    case MODE_BLINKING_PREVIEW:
       Serial.println("Mode = blinking");
       pinMode(DPIN_PWR, OUTPUT);
       digitalWrite(DPIN_PWR, HIGH);
