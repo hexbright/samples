@@ -1,7 +1,7 @@
 /* 
 
   Factory firmware for HexBright FLEX 
-  v2.2  Sept 17, 2012
+  v2.3  Nov 29, 2012
   
 */
 
@@ -20,10 +20,11 @@
 #define APIN_CHARGE             3
 // Modes
 #define MODE_OFF                0
-#define MODE_LOW                2
-#define MODE_HIGH               4
-#define MODE_BLINKING           5
-#define MODE_BLINKING_PREVIEW   6
+#define MODE_LOW                1
+#define MODE_MED                2
+#define MODE_HIGH               3
+#define MODE_BLINKING           4
+#define MODE_BLINKING_PREVIEW   5
 
 // State
 byte mode = 0;
@@ -59,8 +60,7 @@ void setup()
 
 void loop()
 {
-  static unsigned long lastTime, lastTempTime;
-  static byte blink;
+  static unsigned long lastTempTime;
   unsigned long time = millis();
   
   // Check the state of the charge controller
@@ -107,11 +107,7 @@ void loop()
   {
   case MODE_BLINKING:
   case MODE_BLINKING_PREVIEW:
-    if (time-lastTime < 250) break;
-    lastTime = time;
-
-    blink = !blink;
-    digitalWrite(DPIN_DRV_EN, blink);
+    digitalWrite(DPIN_DRV_EN, (time%300)<75);
     break;
   }
   
@@ -127,6 +123,10 @@ void loop()
       newMode = MODE_BLINKING_PREVIEW;
     break;
   case MODE_LOW:
+    if (btnDown && !newBtnDown && (time-btnTime)>50)
+      newMode = MODE_MED;
+    break;
+  case MODE_MED:
     if (btnDown && !newBtnDown && (time-btnTime)>50)
       newMode = MODE_HIGH;
     break;
@@ -159,6 +159,13 @@ void loop()
       break;
     case MODE_LOW:
       Serial.println("Mode = low");
+      pinMode(DPIN_PWR, OUTPUT);
+      digitalWrite(DPIN_PWR, HIGH);
+      digitalWrite(DPIN_DRV_MODE, LOW);
+      analogWrite(DPIN_DRV_EN, 64);
+      break;
+    case MODE_MED:
+      Serial.println("Mode = medium");
       pinMode(DPIN_PWR, OUTPUT);
       digitalWrite(DPIN_PWR, HIGH);
       digitalWrite(DPIN_DRV_MODE, LOW);
