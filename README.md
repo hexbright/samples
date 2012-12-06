@@ -4,7 +4,8 @@ HexBright Demo Code
 hexbright_factory
 -----------------
 This is the software that ships with the Hexbright Flex.  Button presses cycle
-through off, low, and high modes.  Hold down the button while off for blinky mode.
+through off, low, medium, and high modes.  Hold down the button while off for 
+blinky mode.
 
 hexbright4
 ---------------------
