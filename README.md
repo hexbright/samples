@@ -7,6 +7,11 @@ This is the software that ships with the Hexbright Flex.  Button presses cycle
 through off, low, medium, and high modes.  Hold down the button while off for 
 blinky mode.
 
+Modified:
+* Added quick power off in all states. Press and hold pwr button for 0.5 sec to turn off flashlight.
+* Cherry-picked Brandon Himoff changes: Changed blinky mode to dazzle and added accelerometer inactivity power off.
+* Added SOS to dazzle mode. To get there: press and hold pwr button to get dazzle, then short press button again for SOS
+
 hexbright4
 ---------------------
 Fancier than the factory program, but designed for everyday usability.  Button
