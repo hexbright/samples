@@ -3,6 +3,12 @@
   Factory firmware for HexBright FLEX 
   v2.4  Dec 6, 2012
   
+  CHANGELOG :
+  
+  Dec 16, 2012
+    * Added quick power off in all states. Press and hold pwr button to turn off flashlight.
+    * Added SOS to blinky mode. To get there: press and hold pwr button to get blinky, then short press button again for SOS
+  
 */
 
 #include <math.h>
@@ -10,6 +16,7 @@
 
 // Settings
 #define OVERTEMP                340
+
 // Pin assignments
 #define DPIN_RLED_SW            2
 #define DPIN_GLED               5
@@ -18,6 +25,7 @@
 #define DPIN_DRV_EN             10
 #define APIN_TEMP               0
 #define APIN_CHARGE             3
+
 // Modes
 #define MODE_OFF                0
 #define MODE_LOW                1
@@ -25,12 +33,17 @@
 #define MODE_HIGH               3
 #define MODE_BLINKING           4
 #define MODE_BLINKING_PREVIEW   5
+#define MODE_SOS                6
+
+#define MODE_SOS_S              0
+#define MODE_SOS_O              1
+#define MODE_SOS_S_             2
 
 // State
 byte mode = 0;
+byte sos_mode = 0;
 unsigned long btnTime = 0;
 boolean btnDown = false;
-
 
 void setup()
 {
@@ -54,6 +67,7 @@ void setup()
   btnTime = millis();
   btnDown = digitalRead(DPIN_RLED_SW);
   mode = MODE_OFF;
+  sos_mode = MODE_SOS_S;
 
   Serial.println("Powered up!");
 }
@@ -61,7 +75,11 @@ void setup()
 void loop()
 {
   static unsigned long lastTempTime;
+  static unsigned long ditdah;
+  static int ledState = LOW;
+  
   unsigned long time = millis();
+  static unsigned long previousTime = 0;
   
   // Check the state of the charge controller
   int chargeState = analogRead(APIN_CHARGE);
@@ -109,6 +127,52 @@ void loop()
   case MODE_BLINKING_PREVIEW:
     digitalWrite(DPIN_DRV_EN, (time%300)<75);
     break;
+  case MODE_SOS:
+    // 200 ms is the frame for each dit "on", the larger this number the slower the SOS
+    if (time - previousTime > 200) {
+      previousTime = time;   
+      switch (sos_mode)
+      {     
+      case MODE_SOS_S:
+        if (ditdah <= 6) {
+          ledState = (ledState == LOW) ? ledState = HIGH : ledState = LOW;
+          ditdah++;
+        }
+        else {
+          ditdah = 1;
+          sos_mode = MODE_SOS_O;
+        }
+        break;
+      case MODE_SOS_O:
+        if (ditdah <= 12) {        
+          if (ledState == LOW)
+            ledState = HIGH;
+          else if (ditdah % 4 == 0)
+            ledState = LOW;
+          ditdah++;
+        }
+        else {
+          ditdah = 1;
+          sos_mode = MODE_SOS_S_;
+        }
+        break;
+      case MODE_SOS_S_:
+        if (ditdah <= 6) {
+          ledState = (ledState == LOW) ? ledState = HIGH : ledState = LOW;
+          ditdah++;
+        }
+        else if (ditdah < 10)
+          ditdah++;
+        else {
+          ditdah = 1;
+          sos_mode = MODE_SOS_S;
+        }
+        break;      
+      }
+      
+      digitalWrite(DPIN_DRV_EN, ledState);
+    }
+    break;
   }
   
   // Periodically pull down the button's pin, since
@@ -130,10 +194,14 @@ void loop()
   case MODE_LOW:
     if (btnDown && !newBtnDown && (time-btnTime)>50)
       newMode = MODE_MED;
+    if (btnDown && !newBtnDown && (time-btnTime)>500)
+      newMode = MODE_OFF;      
     break;
   case MODE_MED:
     if (btnDown && !newBtnDown && (time-btnTime)>50)
       newMode = MODE_HIGH;
+    if (btnDown && !newBtnDown && (time-btnTime)>500)
+      newMode = MODE_OFF;           
     break;
   case MODE_HIGH:
     if (btnDown && !newBtnDown && (time-btnTime)>50)
@@ -145,6 +213,16 @@ void loop()
       newMode = MODE_BLINKING;
     break;
   case MODE_BLINKING:
+    if (btnDown && !newBtnDown && (time-btnTime)>50) {
+      newMode = MODE_SOS;
+      sos_mode = MODE_SOS_S;
+      // reset ditdah to 1, 1 based due to use of modulo
+      ditdah = 1;
+    }
+    if (btnDown && !newBtnDown && (time-btnTime)>500)
+      newMode = MODE_OFF;           
+    break;
+  case MODE_SOS:    
     if (btnDown && !newBtnDown && (time-btnTime)>50)
       newMode = MODE_OFF;
     break;
@@ -186,6 +264,12 @@ void loop()
     case MODE_BLINKING:
     case MODE_BLINKING_PREVIEW:
       Serial.println("Mode = blinking");
+      pinMode(DPIN_PWR, OUTPUT);
+      digitalWrite(DPIN_PWR, HIGH);
+      digitalWrite(DPIN_DRV_MODE, HIGH);
+      break;
+    case MODE_SOS:
+      Serial.println("Mode = SOS");
       pinMode(DPIN_PWR, OUTPUT);
       digitalWrite(DPIN_PWR, HIGH);
       digitalWrite(DPIN_DRV_MODE, HIGH);
