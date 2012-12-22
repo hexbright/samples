@@ -3,7 +3,7 @@ HexBright Demo Code
 
 hexbright_extra
 -----------------
-This similar to the software that ships with the Hexbright Flex.  Button presses cycle
+This is similar to the software that ships with the Hexbright FLEX.  Button presses cycle
 through off, low, medium, and high modes.  Long Press while off for extended modes (dazzle, SOS).
 
 Button Presses:
