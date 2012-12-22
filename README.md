@@ -1,5 +1,24 @@
-HexBright Demo Code 
+HexBright Code (jaebird)
 =======================
+
+Wiki of mods here: https://github.com/jaebird/HexBrightFLEX/wiki
+
+hexbright_extra
+-----------------
+This is similar to the software that ships with the Hexbright FLEX.  Button presses cycle
+through off, low, medium, and high modes.  Long Press while off for extended modes (dazzle, SOS).
+
+Button Presses:
+* Normal Press is less than 0.5 Sec
+* Long Press is more than 0.5 Sec
+
+Extra:
+* Added quick power off in all modes. Use Long Press to turn off flashlight.
+* Changed factory blinky mode to dazzle mode
+* Added SOS. To get there: Long Press for dazzle, then Normal Press for SOS. The only way to turn of SOS is long press
+* Inactivity shutdown after 10 min unless in SOS mode.
+
+NOTE: Some features cherry picked from Brandon Himoff in loose collaboration (https://github.com/bhimoff/HexBrightFLEX)
 
 hexbright_factory
 -----------------
