@@ -5,7 +5,7 @@
   
   CHANGELOG :
   Dec 21, 2012
-    * Cherry picked more changes from https://github.com/digitalmisery/HexBrightFLEX which improve the handling of SOS and dazzle.
+    * Cherry picked more changes from https://github.com/bhimoff/HexBrightFLEX which improve the handling of SOS and dazzle.
   
   Dec 16, 2012
     * Added quick power off in all states. Press and hold pwr button for 0.5 sec to turn off flashlight.
