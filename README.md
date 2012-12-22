@@ -11,6 +11,7 @@ Modified:
 * Added quick power off in all states. Press and hold pwr button for 0.5 sec to turn off flashlight.
 * Cherry-picked Brandon Himoff changes: Changed blinky mode to dazzle and added accelerometer inactivity power off.
 * Added SOS to dazzle mode. To get there: press and hold pwr button to get dazzle, then short press button again for SOS
+* Added better SOS handling, dazzle and exempted SOS mode from inactivity shutdown
 
 hexbright4
 ---------------------

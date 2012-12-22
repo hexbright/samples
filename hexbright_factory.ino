@@ -4,6 +4,8 @@
   v2.4  Dec 6, 2012
   
   CHANGELOG :
+  Dec 21, 2012
+    * Cherry picked more changes from https://github.com/digitalmisery/HexBrightFLEX which improve the handling of SOS and dazzle.
   
   Dec 16, 2012
     * Added quick power off in all states. Press and hold pwr button for 0.5 sec to turn off flashlight.
@@ -18,7 +20,7 @@
 // Settings
 #define OVERTEMP                340
 
-// Constants
+// Accelerometer defines
 #define ACC_ADDRESS             0x4C
 #define ACC_REG_XOUT            0
 #define ACC_REG_YOUT            1
@@ -28,15 +30,15 @@
 #define ACC_REG_MODE            7
 
 // Pin assignments
-#define DPIN_RLED_SW            2
-#define DPIN_GLED               5
-#define DPIN_PGOOD              7
-#define DPIN_PWR                8
-#define DPIN_DRV_MODE           9
-#define DPIN_DRV_EN             10
-#define DPIN_ACC_INT            3
-#define APIN_TEMP               0
-#define APIN_CHARGE             3
+#define DPIN_RLED_SW            2 //PD2, INT0, MLF PIN 28
+#define DPIN_ACC_INT            3 //PD3, INT1, MLF PIN 1
+#define DPIN_GLED               5 //PD5, OC0B, MLF PIN 7
+#define DPIN_PGOOD              7 //PD7, MLF PIN 9
+#define DPIN_PWR                8 //PB0, MLF PIN 10
+#define DPIN_DRV_MODE           9 //PB1, OC1A, MLF PIN 11
+#define DPIN_DRV_EN             10 //PB2, OC1B, MLF PIN 12
+#define APIN_TEMP               0 //PC0, ADC0, MLF PIN 19
+#define APIN_CHARGE             3 //PC3, ADC3, MLF PIN 22
 
 // Interrupts
 #define INT_SW                  0
@@ -51,15 +53,12 @@
 #define MODE_DAZZLE_PREVIEW     5
 #define MODE_SOS                6
 
-#define MODE_SOS_S              0
-#define MODE_SOS_O              1
-#define MODE_SOS_S_             2
-
 // State
 byte mode = 0;
-byte sos_mode = 0;
 unsigned long btnTime = 0;
 boolean btnDown = false;
+boolean dazzle_on = true;
+long dazzle_period = 100;
 
 void setup()
 {
@@ -88,31 +87,25 @@ void setup()
     ACC_REG_INTS,  // First register (see next line)
     0xE4,  // Interrupts: shakes, taps
     0x00,  // Mode: not enabled yet
-    0x00,  // Sample rate: 120 Hz
+    0x00,  // Sample rate: 120 Hz active
     0x0F,  // Tap threshold
     0x10   // Tap debounce samples
   };
   Wire.beginTransmission(ACC_ADDRESS);
   Wire.write(config, sizeof(config));
   Wire.endTransmission();
-
-  // Enable accelerometer
-  byte enable[] = {ACC_REG_MODE, 0x01};  // Mode: active!
-  Wire.beginTransmission(ACC_ADDRESS);
-  Wire.write(enable, sizeof(enable));
-  Wire.endTransmission();
   
   btnTime = millis();
   btnDown = digitalRead(DPIN_RLED_SW);
   mode = MODE_OFF;
-  sos_mode = MODE_SOS_S;
 
   Serial.println("Powered up!");
+  randomSeed(analogRead(1));
 }
 
 void loop()
 {
-  static unsigned long lastDazzleTime, lastTempTime, lastModeTime, lastAccTime, lastModeSOSTime;
+  static unsigned long lastDazzleTime, lastTempTime, lastModeTime, lastAccTime;
   static unsigned long ditdah;
   static int ledState = LOW;
   
@@ -184,58 +177,16 @@ void loop()
   {
   case MODE_DAZZLE:
   case MODE_DAZZLE_PREVIEW:
-    //digitalWrite(DPIN_DRV_EN, (time%200)<25);
-    if (time - lastDazzleTime > 10)
+    if (time - lastDazzleTime > dazzle_period)
     {
-      digitalWrite(DPIN_DRV_EN, random(4)<1);
+      digitalWrite(DPIN_DRV_EN, dazzle_on);
+      dazzle_on = !dazzle_on;
       lastDazzleTime = time;
+      dazzle_period = random(25,100);
     }    
     break;
   case MODE_SOS:
-    // 200 ms is the frame for each dit "on", the larger this number the slower the SOS
-    if (time-lastModeSOSTime > 200) {
-      lastModeSOSTime = time;   
-      switch (sos_mode)
-      {     
-      case MODE_SOS_S:
-        if (ditdah <= 6) {
-          ledState = (ledState == LOW) ? ledState = HIGH : ledState = LOW;
-          ditdah++;
-        }
-        else {
-          ditdah = 1;
-          sos_mode = MODE_SOS_O;
-        }
-        break;
-      case MODE_SOS_O:
-        if (ditdah <= 12) {        
-          if (ledState == LOW)
-            ledState = HIGH;
-          else if (ditdah % 4 == 0)
-            ledState = LOW;
-          ditdah++;
-        }
-        else {
-          ditdah = 1;
-          sos_mode = MODE_SOS_S_;
-        }
-        break;
-      case MODE_SOS_S_:
-        if (ditdah <= 6) {
-          ledState = (ledState == LOW) ? ledState = HIGH : ledState = LOW;
-          ditdah++;
-        }
-        else if (ditdah < 10)
-          ditdah++;
-        else {
-          ditdah = 1;
-          sos_mode = MODE_SOS_S;
-        }
-        break;      
-      }
-      
-      digitalWrite(DPIN_DRV_EN, ledState);
-    }
+    digitalWrite(DPIN_DRV_EN, morseCodeSOS(time - lastModeTime));
     break;
   }
   
@@ -277,29 +228,35 @@ void loop()
       newMode = MODE_DAZZLE;
     break;
   case MODE_DAZZLE:
-    if (btnDown && !newBtnDown && (time-btnTime)>50) {
+    if (btnDown && !newBtnDown && (time-btnTime)>50)
       newMode = MODE_SOS;
-      sos_mode = MODE_SOS_S;
-      // reset ditdah to 1, 1 based due to use of modulo
-      ditdah = 1;
-    }
-    if (btnDown && !newBtnDown && (time-btnTime)>500)
-      newMode = MODE_OFF;           
+    if (btnDown && newBtnDown && (time-btnTime)>500)
+       newMode = MODE_OFF;
     break;
   case MODE_SOS:    
-    if (btnDown && !newBtnDown && (time-btnTime)>50)
+    if (btnDown && !newBtnDown && (time-btnTime)>500) // SOS emergency on unless long press
       newMode = MODE_OFF;
     break;
   }
-
-  //activity power down
-  if (time-max(lastAccTime,lastModeTime) > 1800000UL) { //30 minutes
+  
+  //activity power down EXCLUDES SOS MODE!
+  if (time-max(lastAccTime,lastModeTime) > 600000UL && newMode != MODE_SOS) { //10 minutes
     newMode = MODE_OFF;
   }
-  
+
   // Do the mode transitions
   if (newMode != mode) {
     lastModeTime = millis();
+ 
+    // Enable or Disable accelerometer
+    byte disable[] = {ACC_REG_MODE, 0x00};  // Mode: standby!
+    byte enable[] = {ACC_REG_MODE, 0x01};  // Mode: active!
+    Wire.beginTransmission(ACC_ADDRESS);
+    if (newMode == MODE_OFF) {
+      Wire.write(disable, sizeof(disable));
+    } else Wire.write(enable, sizeof(enable));
+    Wire.endTransmission();
+
     switch (newMode)
     {
     case MODE_OFF:
@@ -357,33 +314,41 @@ void loop()
   }
 }
 
-void readAccel(char *acc)
-{
-  while (1)
-  {
-    Wire.beginTransmission(ACC_ADDRESS);
-    Wire.write(ACC_REG_XOUT);
-    Wire.endTransmission(false);       // End, but do not stop!
-    Wire.requestFrom(ACC_ADDRESS, 3);  // This one stops.
+bool morseCodeSOS(unsigned long time){
+  const unsigned long dit = 180; 
+  // 180 ms is the frame for each dit "on", the larger this number the slower the SOS
 
-    for (int i = 0; i < 3; i++)
-    {
-      if (!Wire.available())
-        continue;
-      acc[i] = Wire.read();
-      if (acc[i] & 0x40)  // Indicates failed read; redo!
-        continue;
-      if (acc[i] & 0x20)  // Sign-extend
-        acc[i] |= 0xC0;
-    }
-    break;
-  }
+  // Morse Code:
+  // S = ...  O = ---
+  // SOS word = ...---...
+  
+  // word space = 7 dits duration
+  // S = 5 dits duration
+  // char space = 3 dits duration
+  // O = 11 dits duration
+  // char space = 3 dits duration
+  // S = 5 dits duration
+  // total duration = 34
+  
+  byte step = (time / dit) % 34; //dit number modulo the length of the sequence;
+  // Start with word space
+  if (step < 7) return false;
+  step -= 7;
+  // First S
+  if (step < 5) return (step % 2) == 0; // every second dit is off
+  step -= 5;
+  // Char space
+  if (step < 3) return false;
+  step -= 3;
+  // O
+  if (step < 11) return (step % 4) != 3; // every fourth dit is off
+  step -= 11;
+  // Char space
+  if (step < 3) return false;
+  step -= 3;
+   // Last S
+  if (step < 5) return (step % 2) == 0; // every second dit is off
+  // Should never get here
+  Serial.println("Morse SOS overrun error");  
+  return false;
 }
-
-float readAccelAngleXZ()
-{
-  char acc[3];
-  readAccel(acc);
-  return atan2(acc[0], acc[2]);
-}
-
