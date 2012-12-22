@@ -1,5 +1,7 @@
-HexBright Demo Code 
+HexBright Code (jaebird)
 =======================
+
+Wiki of mods here: https://github.com/jaebird/HexBrightFLEX/wiki
 
 hexbright_extra
 -----------------
