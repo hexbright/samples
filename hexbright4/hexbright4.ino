@@ -158,7 +158,7 @@ void loop()
   }
 
   // Check if the accelerometer wants to interrupt
-  byte tapped = 0, shaked = 0;
+  byte tapped = 0, shaken = 0;
   if (!digitalRead(DPIN_ACC_INT))
   {
     Wire.beginTransmission(ACC_ADDRESS);
@@ -172,10 +172,10 @@ void loop()
       lastAccTime = time;
   
       tapped = !!(tilt & 0x20);
-      shaked = !!(tilt & 0x80);
+      shaken = !!(tilt & 0x80);
   
       if (tapped) Serial.println("Tap!");
-      if (shaked) Serial.println("Shake!");
+      if (shaken) Serial.println("Shake!");
     }
   }
 
@@ -257,6 +257,8 @@ void loop()
   case MODE_KNOBBING:
     if (btnDown && !newBtnDown)  // Button released
       newMode = MODE_KNOBBED;
+    if (btnDown && newBtnDown && shaken)
+      newMode = MODE_DAZZLING_PREVIEW;
     if (btnDown && newBtnDown && tapped)
       newMode = MODE_BLINKING_PREVIEW;
     break;
