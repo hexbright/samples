@@ -1,8 +1,8 @@
 /*
-  Hexbright demo firmware: Dazzle
+  Hexbright demo firmware: Momentary
   Andrew Magill  9/2012
   
-  Dazzler flashes while the button is down.
+  Light turns on when the button is down.  That's it.
 */
 
 // Pin assignments
@@ -33,16 +33,8 @@ void setup()
 
 void loop()
 {
-  static unsigned long lastTime;
-  
   if (digitalRead(DPIN_RLED_SW))
-  {
-    if (millis() - lastTime > 10)
-    {
-      digitalWrite(DPIN_DRV_EN, random(4)<1);
-      lastTime = millis();
-    }
-  }
+    digitalWrite(DPIN_DRV_EN, HIGH);
   else
     digitalWrite(DPIN_DRV_EN, LOW);
 }

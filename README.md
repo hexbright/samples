@@ -7,14 +7,14 @@ This is the software that ships with the Hexbright Flex.  Button presses cycle
 through off, low, medium, and high modes.  Hold down the button while off for 
 blinky mode.
 
-hexbright4
+hexbright4.1
 ---------------------
 Fancier than the factory program, but designed for everyday usability.  Button
-presses cycle through off, low and high modes.  Hold the light horizontally,
+presses cycle through off, low, medium and high modes.  Hold the light horizontally,
 hold the button down, and rotate about the long axis clockwise to increase
 brightness, and counter-clockwise to decrease brightness- the brightness sticks
 when you let go of the button.  While holding the button down, give the light a
-firm tap to change to blinky mode, and another to change to dazzle mode.
+firm tap to change to blinky mode, and another to change to dazzle mode, or shake it!
 
 hexbright_demo_morse
 --------------------
