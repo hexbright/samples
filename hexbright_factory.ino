@@ -10,14 +10,15 @@
 
 // Settings
 #define OVERTEMP                340
+#define TEMP_CHECK_INTERVAL     1000
 // Pin assignments
 #define DPIN_RLED_SW            2
-#define DPIN_GLED               5
+#define DPIN_GLED               5    // Green LED in the pushbutton
 #define DPIN_PWR                8
 #define DPIN_DRV_MODE           9
 #define DPIN_DRV_EN             10
-#define APIN_TEMP               0
-#define APIN_CHARGE             3
+#define APIN_TEMP               0    // Temperature sensor
+#define APIN_CHARGE             3    // Charge meter
 // Modes
 #define MODE_OFF                0
 #define MODE_LOW                1
@@ -79,7 +80,7 @@ void loop()
   }
   
   // Check the temperature sensor
-  if (time-lastTempTime > 1000)
+  if (time-lastTempTime > TEMP_CHECK_INTERVAL)
   {
     lastTempTime = time;
     int temperature = analogRead(APIN_TEMP);
