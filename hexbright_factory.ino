@@ -11,8 +11,10 @@
 // Settings
 #define OVERTEMP                340
 #define TEMP_CHECK_INTERVAL     1000
+#define CHARGE_LEVEL_LOW        128
+#define CHARGE_LEVEL_HIGH       768
 // Pin assignments
-#define DPIN_RLED_SW            2
+#define DPIN_RLED_SW            2    // Pushbutton switch
 #define DPIN_GLED               5    // Green LED in the pushbutton
 #define DPIN_PWR                8
 #define DPIN_DRV_MODE           9
@@ -32,55 +34,29 @@ byte mode = 0;
 unsigned long btnTime = 0;
 boolean btnDown = false;
 
-
-void setup()
+void blinkOnCharge(unsigned long time)
 {
-  // We just powered on!  That means either we got plugged 
-  // into USB, or the user is pressing the power button.
-  pinMode(DPIN_PWR,      INPUT);
-  digitalWrite(DPIN_PWR, LOW);
-
-  // Initialize GPIO
-  pinMode(DPIN_RLED_SW,  INPUT);
-  pinMode(DPIN_GLED,     OUTPUT);
-  pinMode(DPIN_DRV_MODE, OUTPUT);
-  pinMode(DPIN_DRV_EN,   OUTPUT);
-  digitalWrite(DPIN_DRV_MODE, LOW);
-  digitalWrite(DPIN_DRV_EN,   LOW);
-  
-  // Initialize serial busses
-  Serial.begin(9600);
-  Wire.begin();
-  
-  btnTime = millis();
-  btnDown = digitalRead(DPIN_RLED_SW);
-  mode = MODE_OFF;
-
-  Serial.println("Powered up!");
-}
-
-void loop()
-{
-  static unsigned long lastTempTime;
-  unsigned long time = millis();
-  
   // Check the state of the charge controller
   int chargeState = analogRead(APIN_CHARGE);
-  if (chargeState < 128)  // Low - charging
+  if (chargeState < CHARGE_LEVEL_LOW)
   {
-    digitalWrite(DPIN_GLED, (time&0x0100)?LOW:HIGH);
+    digitalWrite(DPIN_GLED, (time & 0x0100) ? LOW : HIGH);
   }
-  else if (chargeState > 768) // High - charged
+  else if (chargeState > CHARGE_LEVEL_HIGH)
   {
     digitalWrite(DPIN_GLED, HIGH);
   }
   else // Hi-Z - shutdown
   {
-    digitalWrite(DPIN_GLED, LOW);    
+    digitalWrite(DPIN_GLED, LOW);
   }
-  
+}
+
+void preventOverheating(unsigned long time)
+{
+  static unsigned long lastTempTime;
   // Check the temperature sensor
-  if (time-lastTempTime > TEMP_CHECK_INTERVAL)
+  if (time - lastTempTime > TEMP_CHECK_INTERVAL)
   {
     lastTempTime = time;
     int temperature = analogRead(APIN_TEMP);
@@ -102,20 +78,59 @@ void loop()
       mode = MODE_LOW;
     }
   }
+}
+
+void initSwitch() {
+  pinMode(DPIN_RLED_SW, OUTPUT);
+  pinMode(DPIN_RLED_SW, INPUT);
+}
+
+
+void setup()
+{
+  // We just powered on!  That means either we got plugged 
+  // into USB, or the user is pressing the power button.
+  pinMode(DPIN_PWR,      INPUT);
+  digitalWrite(DPIN_PWR, LOW);
+
+  // Initialize GPIO
+  initSwitch();
+  pinMode(DPIN_GLED,     OUTPUT);
+  pinMode(DPIN_DRV_MODE, OUTPUT);
+  pinMode(DPIN_DRV_EN,   OUTPUT);
+  digitalWrite(DPIN_DRV_MODE, LOW);
+  digitalWrite(DPIN_DRV_EN,   LOW);
+  
+  // Initialize serial busses
+  Serial.begin(9600);
+  Wire.begin();
+  
+  btnTime = millis();
+  btnDown = digitalRead(DPIN_RLED_SW);
+  mode = MODE_OFF;
+
+  Serial.println("Powered up!");
+}
+
+void loop()
+{
+  unsigned long time = millis();
+
+	blinkOnCharge(time);
+  preventOverheating(time);  
 
   // Do whatever this mode does
   switch (mode)
   {
   case MODE_BLINKING:
   case MODE_BLINKING_PREVIEW:
-    digitalWrite(DPIN_DRV_EN, (time%300)<75);
+    digitalWrite(DPIN_DRV_EN, (time % 300) < 75);
     break;
   }
   
   // Periodically pull down the button's pin, since
   // in certain hardware revisions it can float.
-  pinMode(DPIN_RLED_SW, OUTPUT);
-  pinMode(DPIN_RLED_SW, INPUT);
+  initSwitch();
   
   // Check for mode changes
   byte newMode = mode;
