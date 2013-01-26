@@ -10,14 +10,7 @@
 
 // Settings
 #define OVERTEMP                340
-// Pin assignments
-#define DPIN_RLED_SW            2
-#define DPIN_GLED               5
-#define DPIN_PWR                8
-#define DPIN_DRV_MODE           9
-#define DPIN_DRV_EN             10
-#define APIN_TEMP               0
-#define APIN_CHARGE             3
+#define TEMP_CHECK_INTERVAL     1000
 // Modes
 #define MODE_OFF                0
 #define MODE_LOW                1
@@ -31,28 +24,157 @@ byte mode = 0;
 unsigned long btnTime = 0;
 boolean btnDown = false;
 
+/* ------------------- HexBright Hardware Library Functions -------------------  */
+
+class HexBright
+{
+  public:
+    HexBright(void);
+    void setGreenLED(bool);
+    void setRedLED(bool);
+    void setMainLED(bool);
+    void setHighBrightness(bool);
+    void setBrightnessValue(byte);
+    int  getChargeStatus(void);
+    int  getTemperature(void);
+    int  getButtonState(void);
+  private:
+    bool redLEDState;
+
+    // Pin assignments
+    static const byte DPIN_RLED_SW  = 2;  // Red LED in the pushbutton / Pushbutton switch
+    static const byte DPIN_GLED     = 5;  // Green LED in the pushbutton
+    static const byte DPIN_PWR      = 8;  // Main LED power on/off
+    static const byte DPIN_DRV_MODE = 9;  // Main LED brightness mode (low/high)
+    static const byte DPIN_DRV_EN   = 10; // Main LED brightness value
+    static const byte APIN_TEMP     = 0;  // Temperature sensor
+    static const byte APIN_CHARGE   = 3;  // Charge status
+};
+
+HexBright::HexBright(void)
+{
+  redLEDState = false;
+}
+
+void HexBright::setGreenLED(bool on)
+{
+  pinMode(DPIN_GLED, OUTPUT);
+  digitalWrite(DPIN_GLED, on ? HIGH : LOW);
+}
+
+void HexBright::setRedLED(bool on)
+{
+  pinMode(DPIN_RLED_SW, OUTPUT);
+  redLEDState = on;
+  digitalWrite(DPIN_RLED_SW, on ? HIGH : LOW);
+}
+
+void HexBright::setMainLED(bool on)
+{
+  pinMode(DPIN_PWR, OUTPUT);
+  digitalWrite(DPIN_PWR, on ? HIGH : LOW);
+}
+
+void HexBright::setHighBrightness(bool on)
+{
+  pinMode(DPIN_DRV_MODE, OUTPUT);
+  digitalWrite(DPIN_DRV_MODE, on ? HIGH : LOW);
+}
+
+void HexBright::setBrightnessValue(byte value)
+{
+  pinMode(DPIN_DRV_EN, OUTPUT);
+  analogWrite(DPIN_DRV_EN, value);
+}
+
+int HexBright::getChargeStatus(void)
+{
+  return(analogRead(APIN_CHARGE));
+}
+
+int HexBright::getTemperature(void)
+{
+  return(analogRead(APIN_TEMP));
+}
+
+int HexBright::getButtonState(void)
+{
+  // Must disable the red LED first, otherwise button read
+  // will read the state of the LED instead.
+  pinMode(DPIN_RLED_SW, OUTPUT);
+  digitalWrite(DPIN_RLED_SW, LOW);
+
+  // Read the button state
+  pinMode(DPIN_RLED_SW, INPUT);
+  int val = digitalRead(DPIN_RLED_SW);
+
+  // Set the red LED back to its original state
+  setRedLED(redLEDState);
+
+  return(val);
+}
+
+HexBright flashlight;
+
+/* ------------ Common methods that can be reused in other firmwares ----------- */
+
+void blinkOnCharge(unsigned long time)
+{
+  int chargeStatus = flashlight.getChargeStatus();
+
+  if (chargeStatus < 128)      // Charging: blink
+    flashlight.setGreenLED(time & 0x0100);
+  else if (chargeStatus > 768) // Charged: steady
+    flashlight.setGreenLED(true);
+  else // Hi-Z - shutdown
+    flashlight.setGreenLED(false);
+}
+
+void preventOverheating(unsigned long time)
+{
+  static unsigned long lastTempTime;
+
+  // If it's too early to check the temp, return
+  if (time - lastTempTime < TEMP_CHECK_INTERVAL) return;
+
+  lastTempTime = time;
+  int temperature = flashlight.getTemperature();
+  Serial.print("Temp: ");
+  Serial.println(temperature);
+
+  if (mode == MODE_OFF) return; // We are off, nothing to do
+  if (temperature < OVERTEMP) return; // Temperature nominal, carry on.
+
+  Serial.println("Overheating!");
+
+  for (int i = 0; i < 6; i++)
+  {
+    flashlight.setHighBrightness(false);
+    delay(100);
+    flashlight.setHighBrightness(true);
+    delay(100);
+  }
+  flashlight.setHighBrightness(false);
+
+  mode = MODE_LOW;
+}
 
 void setup()
 {
   // We just powered on!  That means either we got plugged 
   // into USB, or the user is pressing the power button.
-  pinMode(DPIN_PWR,      INPUT);
-  digitalWrite(DPIN_PWR, LOW);
+  flashlight.setMainLED(false);
 
   // Initialize GPIO
-  pinMode(DPIN_RLED_SW,  INPUT);
-  pinMode(DPIN_GLED,     OUTPUT);
-  pinMode(DPIN_DRV_MODE, OUTPUT);
-  pinMode(DPIN_DRV_EN,   OUTPUT);
-  digitalWrite(DPIN_DRV_MODE, LOW);
-  digitalWrite(DPIN_DRV_EN,   LOW);
+  flashlight.setHighBrightness(false);
+  flashlight.setBrightnessValue(0);
   
   // Initialize serial busses
   Serial.begin(9600);
   Wire.begin();
   
   btnTime = millis();
-  btnDown = digitalRead(DPIN_RLED_SW);
+  btnDown = flashlight.getButtonState();
   mode = MODE_OFF;
 
   Serial.println("Powered up!");
@@ -60,65 +182,26 @@ void setup()
 
 void loop()
 {
-  static unsigned long lastTempTime;
   unsigned long time = millis();
-  
-  // Check the state of the charge controller
-  int chargeState = analogRead(APIN_CHARGE);
-  if (chargeState < 128)  // Low - charging
-  {
-    digitalWrite(DPIN_GLED, (time&0x0100)?LOW:HIGH);
-  }
-  else if (chargeState > 768) // High - charged
-  {
-    digitalWrite(DPIN_GLED, HIGH);
-  }
-  else // Hi-Z - shutdown
-  {
-    digitalWrite(DPIN_GLED, LOW);    
-  }
-  
-  // Check the temperature sensor
-  if (time-lastTempTime > 1000)
-  {
-    lastTempTime = time;
-    int temperature = analogRead(APIN_TEMP);
-    Serial.print("Temp: ");
-    Serial.println(temperature);
-    if (temperature > OVERTEMP && mode != MODE_OFF)
-    {
-      Serial.println("Overheating!");
 
-      for (int i = 0; i < 6; i++)
-      {
-        digitalWrite(DPIN_DRV_MODE, LOW);
-        delay(100);
-        digitalWrite(DPIN_DRV_MODE, HIGH);
-        delay(100);
-      }
-      digitalWrite(DPIN_DRV_MODE, LOW);
-
-      mode = MODE_LOW;
-    }
-  }
+  blinkOnCharge(time);
+  preventOverheating(time);  
 
   // Do whatever this mode does
   switch (mode)
   {
   case MODE_BLINKING:
   case MODE_BLINKING_PREVIEW:
-    digitalWrite(DPIN_DRV_EN, (time%300)<75);
+    if ((time % 300) < 75)
+      flashlight.setBrightnessValue(0);
+    else
+      flashlight.setBrightnessValue(255);
     break;
   }
   
-  // Periodically pull down the button's pin, since
-  // in certain hardware revisions it can float.
-  pinMode(DPIN_RLED_SW, OUTPUT);
-  pinMode(DPIN_RLED_SW, INPUT);
-  
   // Check for mode changes
   byte newMode = mode;
-  byte newBtnDown = digitalRead(DPIN_RLED_SW);
+  byte newBtnDown = flashlight.getButtonState();
   switch (mode)
   {
   case MODE_OFF:
@@ -157,38 +240,33 @@ void loop()
     {
     case MODE_OFF:
       Serial.println("Mode = off");
-      pinMode(DPIN_PWR, OUTPUT);
-      digitalWrite(DPIN_PWR, LOW);
-      digitalWrite(DPIN_DRV_MODE, LOW);
-      digitalWrite(DPIN_DRV_EN, LOW);
+      flashlight.setMainLED(false);
+      flashlight.setHighBrightness(false);
+      flashlight.setBrightnessValue(0);
       break;
     case MODE_LOW:
       Serial.println("Mode = low");
-      pinMode(DPIN_PWR, OUTPUT);
-      digitalWrite(DPIN_PWR, HIGH);
-      digitalWrite(DPIN_DRV_MODE, LOW);
-      analogWrite(DPIN_DRV_EN, 64);
+      flashlight.setMainLED(true);
+      flashlight.setHighBrightness(false);
+      flashlight.setBrightnessValue(64);
       break;
     case MODE_MED:
       Serial.println("Mode = medium");
-      pinMode(DPIN_PWR, OUTPUT);
-      digitalWrite(DPIN_PWR, HIGH);
-      digitalWrite(DPIN_DRV_MODE, LOW);
-      analogWrite(DPIN_DRV_EN, 255);
+      flashlight.setMainLED(true);
+      flashlight.setHighBrightness(false);
+      flashlight.setBrightnessValue(255);
       break;
     case MODE_HIGH:
       Serial.println("Mode = high");
-      pinMode(DPIN_PWR, OUTPUT);
-      digitalWrite(DPIN_PWR, HIGH);
-      digitalWrite(DPIN_DRV_MODE, HIGH);
-      analogWrite(DPIN_DRV_EN, 255);
+      flashlight.setMainLED(true);
+      flashlight.setHighBrightness(true);
+      flashlight.setBrightnessValue(255);
       break;
     case MODE_BLINKING:
     case MODE_BLINKING_PREVIEW:
       Serial.println("Mode = blinking");
-      pinMode(DPIN_PWR, OUTPUT);
-      digitalWrite(DPIN_PWR, HIGH);
-      digitalWrite(DPIN_DRV_MODE, HIGH);
+      flashlight.setMainLED(true);
+      flashlight.setHighBrightness(true);
       break;
     }
 
@@ -203,4 +281,3 @@ void loop()
     delay(50);
   }
 }
-
